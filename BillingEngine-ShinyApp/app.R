@@ -1,11 +1,6 @@
 #
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
+# This is a Shiny web applicatiomn, basically a dashboard to diplay trend of the Billing for SMB customer
+# over the period of time. 
 
 library(shiny)
 library(plotly)
@@ -18,9 +13,7 @@ Date <- as.Date(BEData$Date,'%m/%d/%y')
 BEData[,Date:=NULL]
 BEData[,Date.1:=NULL]
 
-# Define UI for application that draws a histogram
 ui <- fluidPage(
-   
   
    # Application title
    titlePanel("Billing Engine Dashboard"),
@@ -40,7 +33,6 @@ ui <- fluidPage(
 
 # Define server logic required to draw a plot
 server <- function(input, output) {
-    
     output$distPlot <- renderPlotly({
       Value <- BEData[[input$billingTrend]]
       ggplot(data = BEData, aes(x = Date, y = Value, group=1)) + 
