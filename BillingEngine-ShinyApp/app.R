@@ -7,8 +7,8 @@ library(plotly)
 library(data.table)
 
 BEData <- as.data.frame(read.csv('/Users/karansharma/Google Drive/DataScienceProjects/BillingEngine-ShinyApp/Data/BillingEngineData.csv', header = TRUE, sep = ',') )
-library(data.table)
 BEData <- as.data.table(BEData)
+
 Date <- as.Date(BEData$Date,'%m/%d/%y')
 BEData[,Date:=NULL]
 BEData[,Date.1:=NULL]
@@ -30,19 +30,20 @@ ui <- fluidPage(
    )
 )
 
-
 # Define server logic required to draw a plot
 server <- function(input, output) {
+    
     output$distPlot <- renderPlotly({
-      Value <- BEData[[input$billingTrend]]
-      ggplot(data = BEData, aes(x = Date, y = Value, group=1)) + 
+      value <- BEData[[input$billingTrend]]
+      ggplot(data = BEData, aes(x = Date, y = value, group=1)) + 
         geom_point() +
         geom_line() +
         geom_smooth(se = F) +
         ggtitle("ShareFile Billing Trend for SMB") +
         xlab("\n\nTime")+
-        ylab(paste(input$billingTrend,"\n")) +
-        theme(text = element_text(size=8), axis.title.y=element_text(margin=margin(0,80,0,0)))
+        ylab("Revenue (Dollars)") +
+        theme(text = element_text(size=10))
+
   })
     
 }
