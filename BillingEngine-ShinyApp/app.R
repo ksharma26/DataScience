@@ -20,8 +20,8 @@ ui <- fluidPage(
    # Dropdown with input from the BillingEngine columns  
    sidebarLayout(
    sidebarPanel(
-      selectInput("billingTrend","\n\n\n Please select the value:",
-                  choices = colnames(BEData), selected = "Total Revenue")
+      selectInput("billingTrend","Please select the value:",
+                  choices = colnames(BEData), selected = "Total.Revenue")
    ),
       # Show a plot of the generated distribution
       mainPanel(
@@ -39,10 +39,9 @@ server <- function(input, output) {
         geom_point() +
         geom_line() +
         geom_smooth(se = F) +
-        ggtitle("ShareFile Billing Trend for SMB") +
+        ggtitle(as.character(input$billingTrend)) +
         xlab("\n\nTime")+
-        ylab("Revenue (Dollars)") +
-        theme(text = element_text(size=10))
+        theme(text = element_text(size=8))
 
   })
     
