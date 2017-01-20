@@ -1,6 +1,8 @@
 # DataScience
 
-### Twitter Word Cloud ### (https://ksharma26.shinyapps.io/twitterwordcloud/)
+### Twitter Word Cloud
+
+(https://ksharma26.shinyapps.io/twitterwordcloud/)
 
 Word clouds are graphical representations of word frequency that give greater prominence to words that appear more frequently in a source text. The larger the word in the visual the more common the word was in the data.
 
