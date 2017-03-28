@@ -1,0 +1,260 @@
+---
+title: "Real Estate Data Analysis"
+output:
+  html_notebook: default
+  pdf_document: default
+---
+
+There are data set of historical prices of nearby properties. We are going to analyze this dataset and then build predictive model to estimate the selling price of the houses using the characteristics of properties.
+
+```{r}
+library(FNN)
+library(dplyr)
+
+import.csv <- function(filename) {
+    return(read.csv(filename, sep = ",", header = TRUE))
+}
+
+# utility function for export to csv file
+write.csv <- function(ob, filename) {
+    write.table(ob, filename, quote = FALSE, sep = ",", row.names = FALSE)
+}
+
+# Utility function to find the number of missing values in a column
+count.na <- function(v){
+  return (sum(is.na(v)))
+}
+
+# Utility function to find the most common value in the column
+find_MCV <- function(v){
+  df.freq <- as.data.frame(sort(table(v), TRUE))
+  df.freq
+  mcv.vector = ""
+  for(i in 1:nrow(df.freq)){
+    mcv.vector <- paste(mcv.vector,as.character(df.freq[i,1]),"(",as.character(df.freq[i,2]),") ",sep = "")
+    if (i == 3) break
+  }
+  return (mcv.vector)
+}
+```
+Here we are analysing two datasets, one with missing values and one without. Brief funtion describing the real estate data sets 
+```{r}
+brief <- function(df){
+  print(paste("This dataset has ", nrow(df), " rows and ", ncol(df), " columns."))
+  cat("\n")
+  
+  numeric <- sapply(df,is.numeric)
+  df.realValue <- df[,numeric]
+  df.symbolic <- df[!numeric]
+  df <- NULL
+  
+  cat("Real valued attributes","\n")
+  Attribute_Id <- seq.default(ncol(df.realValue))
+  Attribute_Name <- colnames(df.realValue)
+  Mean <- as.vector(round(apply(df.realValue,2, mean, na.rm=T),2))
+  Median <- as.vector(round(apply(df.realValue,2,median, na.rm=T),2))
+  Sdev <- as.vector((round(apply(df.realValue,2, sd, na.rm=T),2)))
+  Min <- as.vector(round(apply(df.realValue,2, min, na.rm=T),2))
+  Max <- as.vector(round(apply(df.realValue,2, max, na.rm=T),2))
+  Missing <- as.vector(round(apply(df.realValue,2, function(x) count.na(x)),2))
+  output.realValue <- data.frame(Attribute_Id, Attribute_Name, Mean, Median, Sdev, Min, Max, Missing)
+  print(output.realValue)
+  
+  Attribute_Id <- NULL
+  Attribute_Name <- NULL
+  Missing <- NULL
+  cat("Symboic attributes","\n")
+  Attribute_Id <- seq.default(ncol(df.symbolic))
+  Attribute_Name <- colnames(df.symbolic)
+  Missing <- apply(df.symbolic, 2, function(x) count.na(x))
+  Arity <- as.vector(round(apply(df.symbolic, 2, function(x) length(unique(x))),2))
+  MCVS_Count <- as.character((apply(df.symbolic, 2, function(x) find_MCV(x))))
+  output.symbolic <- data.frame(Attribute_Id, Attribute_Name, Missing, Arity, MCVS_Count)
+  rownames(output.symbolic) <- NULL 
+  print(output.symbolic)
+}
+```
+High level descriptive analysis of the data
+
+```{r}
+df.house.data.no.missing <- import.csv("/Users/karansharma/Google Drive/DataScienceProjects/RealEstateDataAnalysis/house_no_missing.csv")
+brief(df.house.data.no.missing)
+```
+Note:
+
+* Arity: The number of unique values for a symbolic attribute
+
+* MCVs_counts: Most common values for an attribute and the number of records in which they appear.
+
+* Missing: The number of missing entries for the attribute; missing values are indicated by blanks in data.
+
+Let's try to understand the dataset through visualization
+
+```{r}
+p = ggplot(data = df.house.data.no.missing, aes(x=house_value))
+p + geom_density(alpha = 0.1, ) 
+```
+Our target variable, house value is normally distributed with litle bit skewed to the right. 
+
+```{r}
+library(ggplot2)
+p = ggplot(data = df.house.data.no.missing, aes(x=accessiblity_to_highway))
+p + geom_histogram(colour = "darkgreen", fill = "white", binwidth = 0.5) 
+```
+Acceseibility to highway is distributed normally but there are some outliers we see in the data
+
+```{r}
+p = ggplot(data = df.house.data.no.missing, aes(x=Crime_Rate, y=house_value))
+p + geom_point() + geom_smooth()
+```
+Overall trend says that the house value is decreasing with the increasing crime rate. The outliers in the end pulling the trend upward. 
+
+```{r}
+p = ggplot(data = df.house.data.no.missing, aes(x=student_teacher_ratio, y=house_value))
+p + geom_point() + geom_smooth()
+```
+As expected, house_value is decreasing with decreasing student teacher ratio. 
+
+```{r}
+p = ggplot(data = df.house.data.no.missing, aes(x=house_value, y=Nitric_Oxides))
+p + geom_point() + geom_smooth()
+```
+Nitric oxidies decreasing the house value initially, but there are certain datapoints towards the high end house which are pulling it upward. Overall, there seems to be no relation of nitric oxides level in the air with the house value. 
+
+```{r}
+p = ggplot(data = df.house.data.no.missing, aes(y=house_value, x=num_of_rooms))
+p + geom_point() + geom_smooth()
+```
+High number of rooms increaing the house value, as expected. 
+
+We are going to try out predictive models: 
+
+1. Default Model
+2. Linear Model
+3. Nearest Neighbor 
+
+Each function trains the model using K fold cross validations and returns a vector of root mean sq error for each fold
+
+```{r}
+# Assumes the last column of data is the output dimension lets build some models
+
+# Connect-the-dots model that learns from train set and is being tested using test 
+get_pred_dots <- function(train,test){
+  nf <- ncol(train)
+  input <- data.matrix(train[,-nf])
+  query <- data.matrix(test[,-nf])
+  my.knn <- get.knnx(input,query,k=2) # Get two nearest neighbors
+  nn.index <- my.knn$nn.index
+  pred <- rep(NA,nrow(test))
+  for (ii in 1:nrow(test)){
+    y1 <- train[nn.index[ii,1],nf]
+    y2 <- train[nn.index[ii,2],nf]
+    pred[ii] = (y1+y2)/2
+  }
+  return(pred)  
+}
+
+#linear model
+get_pred_lr <- function(train,test){
+  nf = ncol(train)
+  my.regression <- lm(house_value~., data = train)
+  output <- predict(my.regression,test)
+  return(output)
+}
+
+# Default predictor model
+get_pred_default <- function(train,test){
+  nf <- ncol(test)
+  output <- mean(train[,nf], na.rm = TRUE)
+  output <- rep(output, each = nrow(test))
+  return (output)
+}
+
+# Function that returns Root Mean Squared Error
+rmse <- function(error){
+  sqrt(mean(error^2))
+}
+
+# Function will do K time cross validation and return a vector of length k of root mean sqr error obtained for model with output target variable
+do_cv<- function(df, output, k, model ){
+  
+  #moving the output to the last using pipe operator in the dplyr
+  df <- df %>% select(-starts_with(output),everything())
+  
+  #cutting the dataframe into k pieces 
+  folds <- cut(seq(1,nrow(df)), breaks = k, labels=FALSE)
+  
+  output<-vector()
+  predValue<-vector()
+  
+  for(i in 1:k){
+    
+    t <- which(folds==i,arr.ind=TRUE)
+    test <- df[t, ]
+    train <- df[-t, ]
+    
+    if(model=='get_pred_default'){
+      predValue <- c(get_pred_default(train,test))
+    }
+    
+    if(model=='get_pred_lr'){
+      predValue <- c(get_pred_lr(train,test))
+    }
+    
+    if(model=='get_pred_dots'){
+      predValue <- c(get_pred_dots(train,test))
+    }
+    
+    error <- c(test[,ncol(test)]) - predValue
+    
+    output <- c(output,rmse(error))
+  }
+  output
+}
+```
+
+
+Now, we are going to call each model and get the mean value of RMSE for each model
+
+```{r}
+df.house.data.no.missing <-  import.csv("/Users/karansharma/Google Drive/DataScienceProjects/RealEstateDataAnalysis/house_no_missing.csv")
+
+rmse.defualt.model <- do_cv(df.house.data.no.missing, 'house_value', 10, 'get_pred_default')
+t.test.default <- t.test(rmse.defualt.model)
+conf.int.default.model <- t.test.default$conf.int[1:2]
+mean_default_model <- t.test.default$estimate
+
+
+rmse.lr.model <- do_cv(df.house.data.no.missing, 'house_value', 10, 'get_pred_lr')
+t.test.lr <- t.test(rmse.lr.model)
+conf.int.lr <- t.test.lr$conf.int[1:2]
+mean_lr_model <- t.test.lr$estimate
+
+
+rmse.kmm.model <- do_cv(df.house.data.no.missing, 'house_value', 10, 'get_pred_dots')
+t.test.kmm <- t.test(rmse.kmm.model)
+conf.int.kmm <- t.test.kmm$conf.int[1:2]
+mean_Knn_model <- t.test.kmm$estimate
+```
+
+
+Let's compare the models: 
+
+```{r}
+barplot(cbind(Default_model = mean_default_model, 
+          Linear_Regression = mean_lr_model, 
+          KNN = mean_Knn_model), xlab = 'Models', ylab = 'RMSE',
+           main = "Barplot of each model")
+
+```
+```{r}
+boxplot(x = conf.int.default.model,conf.int.lr,conf.int.kmm,
+        names = c('Default Model', 'Linear Regression', 'KNN'),
+        col = "lightgray",
+        xlab = "Models",
+        ylab = "Confidence Interval",
+        main = "Boxplot of 95% conf interval for each model"
+        )
+```
+
+Boxplot and Barplot suggest that linear regression has the least RMSE. Second is the nearest neighbour and last is the default model. 
